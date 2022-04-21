@@ -2,6 +2,8 @@
 
 SDL2 based software rasterizer for use with the FNA library. Very early iteration, not stable. Probably don't use this for production, but idk I'm not your boss.
 
+To compile this library clone or download FNA next to this repository so that both RasterFna and FNA folders exist side by side.  
+
 ## Usage
 
 ```csharp
