@@ -221,7 +221,7 @@ namespace RasterFna {
         }
 
         public Texture2D MakeTexture() {
-            if (texture == null) {
+            if (texture == null || texture.IsDisposed) {
                 texture = new Texture2D(graphics, width, height);
             }
 
@@ -244,6 +244,9 @@ namespace RasterFna {
             if (!disposedValue) {
                 if (disposing) {
                     // dispose managed state (managed objects).
+                    if (texture != null && !texture.IsDisposed) {
+                        texture.Dispose();
+                    }
                 }
 
                 // free unmanaged resources (unmanaged objects) and override a finalizer below.
