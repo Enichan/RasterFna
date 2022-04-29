@@ -9,25 +9,13 @@ using static SDL2.SDL;
 
 namespace RasterFna {
     internal static class Ellipse {
-        [ThreadStatic]
-        private static List<Point> ovalOffsets;
-
         public static void DrawEllipse(IntPtr renderer, int x, int y, int radx, int rady, bool fill = false) {
             if (radx == rady) {
                 // hey, this is a circle! >:(
                 Circle.DrawCircle(renderer, x, y, radx, fill);
+                return;
             }
-            else {
-                if (fill) {
-                    DrawEllipse(new OvalSegmentFill(), renderer, x, y, radx, rady, fill);
-                }
-                else {
-                    DrawEllipse(new OvalSegmentEmpty(), renderer, x, y, radx, rady, fill);
-                }
-            }
-        }
 
-        private static void DrawEllipse<TSegment>(TSegment seg, IntPtr renderer, int x, int y, int radx, int rady, bool fill = false) where TSegment : IOvalSegment {
             radx = Math.Abs(radx);
             rady = Math.Abs(rady);
 
@@ -51,87 +39,145 @@ namespace RasterFna {
             long sx = yy2 * radx;
             long sy = 0;
 
-            var points = ovalOffsets ?? (ovalOffsets = new List<Point>());
-            points.Clear();
+            if (fill) {
+                // center
+                while (sx >= sy) {
+                    var x0 = (int)(x - xOffset);
+                    var x1 = (int)(x + xOffset);
+                    var y0 = (int)(y - yOffset);
+                    var y1 = (int)(y + yOffset);
 
-            while (sx >= sy) {
-                points.Add(new Point((int)xOffset, (int)yOffset));
+                    if (x0 == x1) {
+                        // workaround for SDL issue with a single pixel line not drawing at all
+                        SDL_RenderDrawPoint(renderer, x0, y0);
+                        SDL_RenderDrawPoint(renderer, x0, y1);
+                    }
+                    else {
+                        SDL_RenderDrawLine(renderer, x0, y0, x1, y0);
+                        if (yOffset != 0) {
+                            SDL_RenderDrawLine(renderer, x0, y1, x1, y1);
+                        }
+                    }
 
-                yOffset++;
-                sy += xx2;
-                p += dy;
-                dy += xx2;
-
-                if (2 * p + dx > 0) {
-                    xOffset--;
-                    sx -= yy2;
-                    p += dx;
-                    dx += yy2;
-                }
-            }
-
-            xOffset = 0;
-            yOffset = rady;
-
-            dx = rady * rady;
-            dy = radx * radx * (1 - 2 * rady);
-            p = 0;
-
-            sx = 0;
-            sy = xx2 * rady;
-
-            while (sx <= sy) {
-                points.Add(new Point((int)xOffset, (int)yOffset));
-
-                xOffset++;
-                sx += yy2;
-                p += dx;
-                dx += yy2;
-
-                if (2 * p + dy > 0) {
-                    yOffset--;
-                    sy -= xx2;
+                    yOffset++;
+                    sy += xx2;
                     p += dy;
                     dy += xx2;
+
+                    if (2 * p + dx > 0) {
+                        xOffset--;
+                        sx -= yy2;
+                        p += dx;
+                        dx += yy2;
+                    }
+                }
+
+                xOffset = 0;
+                yOffset = rady;
+
+                dx = rady * rady;
+                dy = radx * radx * (1 - 2 * rady);
+                p = 0;
+
+                sx = 0;
+                sy = xx2 * rady;
+
+                // top/bottom
+                while (sx <= sy) {
+                    xOffset++;
+                    sx += yy2;
+                    p += dx;
+                    dx += yy2;
+
+                    if (2 * p + dy > 0) {
+                        var x0 = (int)(x - xOffset);
+                        var x1 = (int)(x + xOffset);
+                        var y0 = (int)(y - yOffset);
+                        var y1 = (int)(y + yOffset);
+
+                        if (x0 == x1) {
+                            // workaround for SDL issue with a single pixel line not drawing at all
+                            SDL_RenderDrawPoint(renderer, x0, y0);
+                            SDL_RenderDrawPoint(renderer, x0, y1);
+                        }
+                        else {
+                            SDL_RenderDrawLine(renderer, x0, y0, x1, y0);
+                            SDL_RenderDrawLine(renderer, x0, y1, x1, y1);
+                        }
+
+                        yOffset--;
+                        sy -= xx2;
+                        p += dy;
+                        dy += xx2;
+                    }
                 }
             }
+            else {
+                // center
+                while (sx >= sy) {
+                    var x0 = (int)(x - xOffset);
+                    var x1 = (int)(x + xOffset);
+                    var y0 = (int)(y - yOffset);
 
-            PlotEllipse(seg, renderer, x, y, points);
-        }
+                    SDL_RenderDrawPoint(renderer, x0, y0);
+                    SDL_RenderDrawPoint(renderer, x1, y0);
 
-        private static void PlotEllipse<TSegment>(TSegment seg, IntPtr renderer, int x, int y, List<Point> points) where TSegment : IOvalSegment {
-            for (int i = 0; i < points.Count; i++) {
-                var offset = points[i];
+                    if (yOffset != 0) {
+                        var y1 = (int)(y + yOffset);
+                        SDL_RenderDrawPoint(renderer, x0, y1);
+                        SDL_RenderDrawPoint(renderer, x1, y1);
+                    }
 
-                var x0 = x - offset.X;
-                var x1 = x + offset.X;
-                var y0 = y - offset.Y;
-                var y1 = y + offset.Y;
+                    yOffset++;
+                    sy += xx2;
+                    p += dy;
+                    dy += xx2;
 
-                seg.Plot(renderer, x0, y0, x1);
-                seg.Plot(renderer, x0, y1, x1);
-            }
-        }
+                    if (2 * p + dx > 0) {
+                        xOffset--;
+                        sx -= yy2;
+                        p += dx;
+                        dx += yy2;
+                    }
+                }
 
-        // this mess below is just to make our actual ellipse plotting code cleaner
-        // because without it we either have an "if (fill)" branch in the inner loop
-        // (which is slow) or be forced to duplicate code by putting it outside the
-        // inner loop (unclean code), and these structs let us generify the actual
-        // segment plotting code without using the performance penalty of delegates
-        private interface IOvalSegment { void Plot(IntPtr renderer, int x0, int y, int x1); }
+                xOffset = 0;
+                yOffset = rady;
 
-        private struct OvalSegmentFill : IOvalSegment {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public void Plot(IntPtr renderer, int x0, int y, int x1) {
-                SDL_RenderDrawLine(renderer, x0, y, x1, y);
-            }
-        }
+                dx = rady * rady;
+                dy = radx * radx * (1 - 2 * rady);
+                p = 0;
 
-        private struct OvalSegmentEmpty : IOvalSegment {
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public void Plot(IntPtr renderer, int x0, int y, int x1) {
-                SDL_RenderDrawPoint(renderer, x0, y);
-                SDL_RenderDrawPoint(renderer, x1, y);
+                sx = 0;
+                sy = xx2 * rady;
+
+                // top/bottom
+                while (sx <= sy) {
+                    var x0 = (int)(x - xOffset);
+                    var y0 = (int)(y - yOffset);
+                    var y1 = (int)(y + yOffset);
+
+                    SDL_RenderDrawPoint(renderer, x0, y0);
+                    SDL_RenderDrawPoint(renderer, x0, y1);
+
+                    if (xOffset != 0) {
+                        var x1 = (int)(x + xOffset);
+                        SDL_RenderDrawPoint(renderer, x1, y0);
+                        SDL_RenderDrawPoint(renderer, x1, y1);
+                    }
+
+                    xOffset++;
+                    sx += yy2;
+                    p += dx;
+                    dx += yy2;
+
+                    if (2 * p + dy > 0) {
+                        yOffset--;
+                        sy -= xx2;
+                        p += dy;
+                        dy += xx2;
+                    }
+                }
             }
         }
     }
